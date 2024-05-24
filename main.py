@@ -9,7 +9,7 @@ class LoadData:
         self.communes_url = "https://data.paysdelaloire.fr/api/explore/v2.1/catalog/datasets/234400034_communes-des-pays-de-la-loire/records"
         self.population_url = "https://data.paysdelaloire.fr/api/explore/v2.1/catalog/datasets/12002701600563_population_pays_de_la_loire_2019_communes_epci/records"
         self.entreprises_url = "https://data.paysdelaloire.fr/api/explore/v2.1/catalog/datasets/120027016_base-sirene-v3-ss/records"
-        self.pollution_url = "https://data.airpl.org/api/v1/mesure/journaliere/"
+        self.pollution_url = "https://data.airpl.org/api/v1/mesure/horaire/"
 
         self.communes_params = {
             'select': 'nom_comm,insee_comm,geo_shape,geo_point_2d',
@@ -61,15 +61,25 @@ class LoadData:
         while True:
             self.logger.info(f"Fetching data from {url} with offset {params['offset']}")
             response = requests.get(url, params=params)
-            data = response.json()
+            
+            try:
+                data = response.json()
+                print(len(data.get('results')))
+            except ValueError as e:
+                self.logger.error(f"Error parsing JSON response: {e}")
+                break  # Exit the loop if JSON parsing fails
+            
             records = data.get('results', [])
             if not records:
                 self.logger.info("No more records found, stopping fetch.")
                 break
+            
             all_records.extend(records)
             params['offset'] += params['limit']
+        
         self.logger.info(f"Fetched {len(all_records)} records from {url}")
         return all_records
+
 
     def get_communes_data(self, use_cache=True):
         if use_cache and os.path.exists(self.cache_communes_path):
@@ -129,7 +139,6 @@ class LoadData:
     def combine_data(self, communes_data, population_data, entreprise_data, pm10_data, no2_data):
         self.logger.info("Combining data.")
         population_dict = {item['code_commune']: item['population_municipale'] for item in population_data}
-        count = 0
         
         for commune in communes_data:
             insee_comm = commune['insee_comm']
@@ -149,7 +158,6 @@ class LoadData:
                 if (str(record.get("code_commune")) == insee_comm) and (str(record.get("validite")) == "True"):
                     pm10_valide = {record.get("date_heure_local"), record.get("valeur")}
                     pollutions['pm10'].append(pm10_valide)
-                    count = count + 1
             
             for record in no2_data:
                 if (str(record.get("code_commune")) == insee_comm) and (str(record.get("validite")) == "True"):
@@ -166,8 +174,8 @@ class LoadData:
         communes_data = self.get_communes_data(use_cache)
         population_data = self.get_population_data(use_cache)
         entreprise_data = self.get_entreprise_data(use_cache)
-        pm10_data = self.get_pm10_data(use_cache)
-        no2_data = self.get_no2_data(use_cache)
+        pm10_data = self.get_pm10_data(use_cache=False)
+        no2_data = self.get_no2_data(use_cache=False)
         combined_data = self.combine_data(communes_data, population_data, entreprise_data, pm10_data, no2_data)
         df = pd.DataFrame(combined_data)
         self.logger.info("Combined dataframe created.")
@@ -196,9 +204,6 @@ if __name__ == "__main__":
 
     cleaner = CleanData(combined_df)
     clean_df = cleaner.getCleanDataframe()
-
-    # Affichage du DataFrame combiné
-    #print(combined_df)
 
     # Sauvegarde du DataFrame en JSON
     loader.save_dataframe_to_json(clean_df, 'data/combined_data_clean.json')
