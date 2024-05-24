@@ -178,13 +178,27 @@ class LoadData:
         df.to_json(file_path, orient='records', lines=True, force_ascii=False)
         self.logger.info(f"Dataframe successfully saved to {file_path}.")
 
+class CleanData():
+    def __init__(self, dataframe):
+        self.brut_df = dataframe.copy()
+
+    # NOTE: Penser à conserver les communes frontalière en cas d'alerte ?
+    def deleteEmptyCityPollution(self):
+        self.brut_df = self.brut_df[self.brut_df["pollutions"].apply(lambda x: len(x.get("no2", [])) > 0 or len(x.get("pm10", [])) > 0)]
+
+    def getCleanDataframe(self):
+        self.deleteEmptyCityPollution()
+        return self.brut_df.copy()
 # Utilisation de la classe
 if __name__ == "__main__":
     loader = LoadData()
     combined_df = loader.get_combined_dataframe()
 
+    cleaner = CleanData(combined_df)
+    clean_df = cleaner.getCleanDataframe()
+
     # Affichage du DataFrame combiné
     #print(combined_df)
 
     # Sauvegarde du DataFrame en JSON
-    loader.save_dataframe_to_json(combined_df, 'data/combined_data.json')
+    loader.save_dataframe_to_json(clean_df, 'data/combined_data_clean.json')
