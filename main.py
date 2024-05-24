@@ -32,7 +32,7 @@ class LoadData:
         self.pm10_params = {
             'code_configuration_de_mesure__code_point_de_prelevement__code_polluant': '24',
             'code_configuration_de_mesure__code_point_de_prelevement__code_station__code_commune__code_departement__in': '44,49,53,72,85',
-            'date_heure_tu__range': '2023-5-25,2024-5-24',
+            'date_heure_tu__range': '2022-5-25,2024-5-24',
             'export': 'json',
             'limit': 1000,
             'offset': 0
@@ -41,7 +41,7 @@ class LoadData:
         self.no2_params = {
             'code_configuration_de_mesure__code_point_de_prelevement__code_polluant': '03',
             'code_configuration_de_mesure__code_point_de_prelevement__code_station__code_commune__code_departement__in': '44,49,53,72,85',
-            'date_heure_tu__range': '2023-5-25,2024-5-24',
+            'date_heure_tu__range': '2022-5-25,2024-5-24',
             'export': 'json',
             'limit': 1000,
             'offset': 0
@@ -129,6 +129,7 @@ class LoadData:
     def combine_data(self, communes_data, population_data, entreprise_data, pm10_data, no2_data):
         self.logger.info("Combining data.")
         population_dict = {item['code_commune']: item['population_municipale'] for item in population_data}
+        count = 0
         
         for commune in communes_data:
             insee_comm = commune['insee_comm']
@@ -148,6 +149,7 @@ class LoadData:
                 if (str(record.get("code_commune")) == insee_comm) and (str(record.get("validite")) == "True"):
                     pm10_valide = {record.get("date_heure_local"), record.get("valeur")}
                     pollutions['pm10'].append(pm10_valide)
+                    count = count + 1
             
             for record in no2_data:
                 if (str(record.get("code_commune")) == insee_comm) and (str(record.get("validite")) == "True"):
@@ -156,7 +158,6 @@ class LoadData:
 
             commune["pollutions"] = pollutions
             
-
         self.logger.info("Data combined successfully.")
         return communes_data
 
@@ -183,7 +184,7 @@ if __name__ == "__main__":
     combined_df = loader.get_combined_dataframe()
 
     # Affichage du DataFrame combiné
-    print(combined_df)
+    #print(combined_df)
 
     # Sauvegarde du DataFrame en JSON
     loader.save_dataframe_to_json(combined_df, 'data/combined_data.json')
