@@ -1,0 +1,21 @@
+{
+    "NO2":
+    {
+        "objectif de qualité": 40, 
+        "limite humain": 200, 
+        "moyenne annuelle": 40, 
+        "limite vegetaux": 30, 
+        "seuil information": 200,
+        "seuils alerte": {
+            "moyenne horaire sur 3h consecutive": 400,
+            "prevision J+1": 200,
+            "moyenne horaire 3 jours": 200
+        }
+    },
+    "PM10":
+    {
+        "objectif de qualité": 30, 
+        "limite humain": 25, 
+        "cible humain": 20
+    }
+}

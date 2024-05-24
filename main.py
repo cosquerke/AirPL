@@ -5,10 +5,11 @@ import joblib
 import os
 
 class LoadData:
-    def __init__(self, cache_communes_path='communes_data.pkl', cache_population_path='population_data.pkl', cache_entreprise_path='entreprise_data.pkl'):
+    def __init__(self, cache_communes_path='communes_data.pkl', cache_population_path='population_data.pkl', cache_entreprise_path='entreprise_data.pkl', cache_pm10_path='pm10_data.pkl', cache_no2_path="no2_data.pkl"):
         self.communes_url = "https://data.paysdelaloire.fr/api/explore/v2.1/catalog/datasets/234400034_communes-des-pays-de-la-loire/records"
         self.population_url = "https://data.paysdelaloire.fr/api/explore/v2.1/catalog/datasets/12002701600563_population_pays_de_la_loire_2019_communes_epci/records"
         self.entreprises_url = "https://data.paysdelaloire.fr/api/explore/v2.1/catalog/datasets/120027016_base-sirene-v3-ss/records"
+        self.pollution_url = "https://data.airpl.org/api/v1/mesure/journaliere/"
 
         self.communes_params = {
             'select': 'nom_comm,insee_comm,geo_shape,geo_point_2d',
@@ -28,9 +29,29 @@ class LoadData:
             'offset': 0
         }
 
+        self.pm10_params = {
+            'code_configuration_de_mesure__code_point_de_prelevement__code_polluant': '24',
+            'code_configuration_de_mesure__code_point_de_prelevement__code_station__code_commune__code_departement__in': '44,49,53,72,85',
+            'date_heure_tu__range': '2023-5-25,2024-5-24',
+            'export': 'json',
+            'limit': 1000,
+            'offset': 0
+        }
+
+        self.no2_params = {
+            'code_configuration_de_mesure__code_point_de_prelevement__code_polluant': '03',
+            'code_configuration_de_mesure__code_point_de_prelevement__code_station__code_commune__code_departement__in': '44,49,53,72,85',
+            'date_heure_tu__range': '2023-5-25,2024-5-24',
+            'export': 'json',
+            'limit': 1000,
+            'offset': 0
+        }
+
         self.cache_communes_path = cache_communes_path
         self.cache_population_path = cache_population_path
         self.cache_entreprise_path = cache_entreprise_path
+        self.cache_pm10_path = cache_pm10_path
+        self.cache_no2_path = cache_no2_path
 
         logging.basicConfig(level=logging.INFO)
         self.logger = logging.getLogger(__name__)
@@ -83,7 +104,29 @@ class LoadData:
             self.logger.info(f"Entreprise data cached to {self.cache_entreprise_path}.")
         return entreprise_data
 
-    def combine_data(self, communes_data, population_data, entreprise_data):
+    def get_pm10_data(self, use_cache=True):
+        if use_cache and os.path.exists(self.cache_pm10_path):
+            self.logger.info(f"Loading cached pm10 data from {self.cache_pm10_path}.")
+            pm10_data = joblib.load(self.cache_pm10_path)
+        else:
+            self.logger.info("Fetching pm10 data.")
+            pm10_data = self.fetch_data(self.pollution_url, self.pm10_params)
+            joblib.dump(pm10_data, self.cache_pm10_path)
+            self.logger.info(f"pm10 data cached to {self.cache_pm10_path}.")
+        return pm10_data
+    
+    def get_no2_data(self, use_cache=True):
+        if use_cache and os.path.exists(self.cache_no2_path):
+            self.logger.info(f"Loading cached NO2 data from {self.cache_no2_path}.")
+            no2_data = joblib.load(self.cache_no2_path)
+        else:
+            self.logger.info("Fetching NO2 data.")
+            no2_data = self.fetch_data(self.pollution_url, self.no2_params)
+            joblib.dump(no2_data, self.cache_no2_path)
+            self.logger.info(f"NO2 data cached to {self.cache_no2_path}.")
+        return no2_data
+
+    def combine_data(self, communes_data, population_data, entreprise_data, pm10_data, no2_data):
         self.logger.info("Combining data.")
         population_dict = {item['code_commune']: item['population_municipale'] for item in population_data}
         
@@ -91,10 +134,29 @@ class LoadData:
             insee_comm = commune['insee_comm']
             commune['population_municipale'] = population_dict.get(insee_comm, None)
             entreprises = []
+            pollutions = {
+                "no2": [],
+                "pm10": []
+            }
+
             for entreprise in entreprise_data:
-                if(str(entreprise.get('codecommuneetablissement')) == insee_comm):
+                if str(entreprise.get('codecommuneetablissement')) == insee_comm:
                     entreprises.append(entreprise)
             commune['entreprises'] = entreprises
+
+            for record in pm10_data:
+                if (str(record.get("code_commune")) == insee_comm) and (str(record.get("validite")) == "True"):
+                    pm10_valide = {record.get("date_heure_local"), record.get("valeur")}
+                    pollutions['pm10'].append(pm10_valide)
+            
+            for record in no2_data:
+                if (str(record.get("code_commune")) == insee_comm) and (str(record.get("validite")) == "True"):
+                    no2_valide = {record.get("date_heure_local"), record.get("valeur")}
+                    pollutions['no2'].append(no2_valide)
+
+            commune["pollutions"] = pollutions
+            
+
         self.logger.info("Data combined successfully.")
         return communes_data
 
@@ -103,7 +165,9 @@ class LoadData:
         communes_data = self.get_communes_data(use_cache)
         population_data = self.get_population_data(use_cache)
         entreprise_data = self.get_entreprise_data(use_cache)
-        combined_data = self.combine_data(communes_data, population_data, entreprise_data)
+        pm10_data = self.get_pm10_data(use_cache)
+        no2_data = self.get_no2_data(use_cache)
+        combined_data = self.combine_data(communes_data, population_data, entreprise_data, pm10_data, no2_data)
         df = pd.DataFrame(combined_data)
         self.logger.info("Combined dataframe created.")
         return df
@@ -119,7 +183,7 @@ if __name__ == "__main__":
     combined_df = loader.get_combined_dataframe()
 
     # Affichage du DataFrame combiné
-    print(combined_df.head())
+    print(combined_df)
 
     # Sauvegarde du DataFrame en JSON
     loader.save_dataframe_to_json(combined_df, 'data/combined_data.json')
