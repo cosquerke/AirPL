@@ -316,15 +316,15 @@ class ProcessData():
         pass
 # Utilisation de la classe
 if __name__ == "__main__":
-#    loader = LoadData()
-#    combined_df = loader.get_combined_dataframe()
+    loader = LoadData()
+    combined_df = loader.get_combined_dataframe()
 
-#    cleaner = CleanData(combined_df)
-#    clean_df = cleaner.get_cached_clean_df()
+    cleaner = CleanData(combined_df)
+    clean_df = cleaner.get_cached_clean_df()
 
     clean_df = joblib.load("clean_df_data.pkl")
 
     exposer = ProcessData(clean_df)
-#    exposer.getPollutionAverageByCityandSTrimester("no2")
-#    exposer.getPollutionAverageByCityandSTrimester("pm10")
+    exposer.getPollutionAverageByCityandSTrimester("no2")
+    exposer.getPollutionAverageByCityandSTrimester("pm10")
     exposer.getHightNo2LevelByPopulation()
