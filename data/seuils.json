@@ -1,7 +1,7 @@
 {
     "NO2":
     {
-        "objectif de qualité": 40, 
+        "objectif de qualite": 40, 
         "limite humain": 200, 
         "moyenne annuelle": 40, 
         "limite vegetaux": 30, 
