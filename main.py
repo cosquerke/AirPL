@@ -237,12 +237,12 @@ class ProcessData():
         logging.basicConfig(level=logging.INFO)
         self.logger = logging.getLogger(__name__)
 
-    def getPollutionAverageByCityandSTrimester(self, pollutant_type):
+    def getPollutionAverageByCityandSTrimester(self, pollution):
         records = []
         for index, row in self.dataframe.iterrows():
             nom_comm = row['nom_comm']
             self.logger.info("getPollutionByCityandSemester() -> "+nom_comm)
-            for value, date in row['pollutions'][pollutant_type]:
+            for value, date in row['pollutions'][pollution]:
                 date = pd.to_datetime(date)
                 trimester = (date.month - 1) // 3 + 1  # 1 pour Q1, 2 pour Q2, 3 pour Q3, 4 pour Q4
                 year = date.year
@@ -263,9 +263,9 @@ class ProcessData():
             plt.figure(figsize=(10, 6))
             plt.bar(city_data['year'].astype(str) + '-T' + city_data['trimester'].astype(str),
                     city_data['value'], color='blue')
-            plt.title(f'Moyenne trimestrielle de {pollutant_type.upper()} pour {city}')
+            plt.title(f'Moyenne trimestrielle de {pollution.upper()} pour {city}')
             plt.xlabel('Trimestre')
-            plt.ylabel(f'Moyenne {pollutant_type.upper()}')
+            plt.ylabel(f'Moyenne {pollution.upper()}')
             plt.xticks(rotation=45)
             plt.tight_layout()
             plt.show()
@@ -313,12 +313,12 @@ class ProcessData():
         plt.tight_layout()
         plt.show()
     
-    def getTop3PollutionHoursByCityAndTrimester(self, pollutant_type):
+    def getTop5PollutionHoursByCityAndTrimester(self, pollution):
         records = []
         for index, row in self.dataframe.iterrows():
             nom_comm = row['nom_comm']
-            self.logger.info("getTop3PollutionHoursByCityAndTrimester() -> " + nom_comm)
-            for value, date in row['pollutions'][pollutant_type]:
+            self.logger.info("getTop5PollutionHoursByCityAndTrimester() -> " + nom_comm)
+            for value, date in row['pollutions'][pollution]:
                 date = pd.to_datetime(date)
                 hour = date.hour
                 trimester = (date.month - 1) // 3 + 1  # 1 pour Q1, 2 pour Q2, 3 pour Q3, 4 pour Q4
@@ -334,7 +334,7 @@ class ProcessData():
         hourly_pollution = pollution_df.groupby(['nom_comm', 'year', 'trimester', 'hour']).agg({'value': 'mean'}).reset_index()
         
         # Étape 2 : Pour chaque ville et chaque trimestre, trouver les 3 heures avec les valeurs moyennes les plus élevées
-        top_hours = hourly_pollution.groupby(['nom_comm', 'year', 'trimester']).apply(lambda x: x.nlargest(3, 'value')).reset_index(drop=True)
+        top_hours = hourly_pollution.groupby(['nom_comm', 'year', 'trimester']).apply(lambda x: x.nlargest(5, 'value')).reset_index(drop=True)
         
         # Étape 3 : Génération des graphiques pour chaque ville et chaque trimestre
         cities = top_hours['nom_comm'].unique()
@@ -347,14 +347,14 @@ class ProcessData():
                     if not trimester_data.empty:
                         plt.figure(figsize=(10, 6))
                         plt.bar(trimester_data['hour'].astype(str), trimester_data['value'], color='blue')
-                        plt.title(f'Top 3 Heures de Pic de Pollution pour {city} - {year} T{trimester}')
+                        plt.title(f'Top 5 Heures de Pic de Pollution pour {city} - {year} T{trimester}')
                         plt.xlabel('Heure')
-                        plt.ylabel(f'Valeur Moyenne de {pollutant_type.upper()}')
+                        plt.ylabel(f'Valeur Moyenne de {pollution.upper()}')
                         plt.xticks(rotation=45)
                         plt.tight_layout()
                         plt.show()
 
-    def plotEnterpriseSectionsByCity(self):
+    def getEnterpriseSectionsByCity(self):
         records = []
         
         for index, row in self.dataframe.iterrows():
@@ -386,6 +386,40 @@ class ProcessData():
             plt.tight_layout()
             plt.show()
 
+    def getPollutionEvolutionByCity(self, pollution):
+        records = []
+        for index, row in self.dataframe.iterrows():
+            nom_comm = row['nom_comm']
+            self.logger.info("getPollutionEvolutionByCity() -> " + nom_comm)
+            for value, date in row['pollutions'][pollution]:
+                date = pd.to_datetime(date).tz_localize(None)  # Convertir en tz-naive
+                records.append([nom_comm, value, date])
+        
+        pollution_df = pd.DataFrame(records, columns=['nom_comm', 'value', 'date'])
+        
+        # Convertir les valeurs en type numérique
+        pollution_df['value'] = pd.to_numeric(pollution_df['value'], errors='coerce')
+        
+        # Étape 1 : Calculer les moyennes hebdomadaires de la pollution par ville
+        pollution_df['date'] = pd.to_datetime(pollution_df['date'])
+        pollution_df['week'] = pollution_df['date'].dt.to_period('W').apply(lambda r: r.start_time)
+        
+        weekly_pollution = pollution_df.groupby(['nom_comm', 'week']).agg({'value': 'mean'}).reset_index()
+        
+        # Étape 2 : Génération des graphiques pour chaque ville
+        cities = weekly_pollution['nom_comm'].unique()
+        for city in cities:
+            city_data = weekly_pollution[weekly_pollution['nom_comm'] == city]
+            
+            plt.figure(figsize=(12, 8))
+            plt.plot(city_data['week'], city_data['value'], marker='o', linestyle='-', color='blue')
+            plt.title(f'Évolution de la Pollution pour {city}')
+            plt.xlabel('Date')
+            plt.ylabel(f'Valeur Moyenne Hebdomadaire de {pollution.upper()}')
+            plt.xticks(rotation=45)
+            plt.tight_layout()
+            plt.show()
+
 # Utilisation de la classe
 if __name__ == "__main__":
     loader = LoadData()
@@ -394,13 +428,15 @@ if __name__ == "__main__":
     cleaner = CleanData(combined_df)
     clean_df = cleaner.get_cached_clean_df()
 
-    #clean_df = joblib.load("clean_df_data.pkl")
+   # clean_df = joblib.load("clean_df_data.pkl")
 
     exposer = ProcessData(clean_df)
     exposer.getPollutionAverageByCityandSTrimester("no2")
     exposer.getPollutionAverageByCityandSTrimester("pm10")
     exposer.getHightPollutionLevelByPopulation("no2")
     exposer.getHightPollutionLevelByPopulation("pm10")
-    exposer.getTop3PollutionHoursByCityAndTrimester("no2")
-    exposer.getTop3PollutionHoursByCityAndTrimester("pm10")
-    exposer.plotEnterpriseSectionsByCity()
+    exposer.getTop5PollutionHoursByCityAndTrimester("no2")
+    exposer.getTop5PollutionHoursByCityAndTrimester("pm10")
+    exposer.getEnterpriseSectionsByCity()
+    exposer.getPollutionEvolutionByCity("no2")
+    exposer.getPollutionEvolutionByCity("pm10")
