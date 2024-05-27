@@ -1,5 +1,5 @@
 {
-    "NO2":
+    "no2":
     {
         "objectif de qualite": 40, 
         "limite humain": 200, 
@@ -12,9 +12,9 @@
             "moyenne horaire 3 jours": 200
         }
     },
-    "PM10":
+    "pm10":
     {
-        "objectif de qualité": 30, 
+        "objectif de qualite": 30, 
         "limite humain": 25, 
         "cible humain": 20
     }
