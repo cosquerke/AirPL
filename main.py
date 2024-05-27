@@ -232,6 +232,7 @@ class CleanData():
 class ProcessData():
     def __init__(self, dataframe):
         self.dataframe = dataframe.copy()
+        self.json_seuil_path = 'data/seuils.json'
 
         logging.basicConfig(level=logging.INFO)
         self.logger = logging.getLogger(__name__)
@@ -268,33 +269,35 @@ class ProcessData():
             plt.xticks(rotation=45)
             plt.tight_layout()
             plt.show()
-            
-    def getHightNo2LevelByPopulation(self):
-        with open('data/seuils.json') as f:
+
+    def getHightPollutionLevelByPopulation(self,pollution):
+
+        with open(self.json_seuil_path) as f:
             seuils = json.load(f)
 
-        # Extraire le seuil d'information pour NO2
-        seuil_qualite_no2 = seuils['NO2']['objectif de qualite']
-        # Étape 1 : Convertir les données de "no2" en DataFrame
+        # Extraire le seuil d'information pour la pollution
+        seuil_qualite_pollution = seuils[pollution]['objectif de qualite']
+        
+        # Étape 1 : Convertir les données de la pollution en DataFrame
         records = []
         for index, row in self.dataframe.iterrows():
             nom_comm = row['nom_comm']
             population = row['population_municipale']
-            self.logger.info("getHightNo2LevelByPopulation() -> "+nom_comm)
-            for value, date in row['pollutions']['no2']:
+            self.logger.info(f'getHight{pollution}LevelByPopulation() -> '+nom_comm)
+            for value, date in row['pollutions'][pollution]:
                 date = pd.to_datetime(date)
                 trimester = (date.month - 1) // 3 + 1  # 1 pour Q1, 2 pour Q2, 3 pour Q3, 4 pour Q4
                 year = date.year
                 records.append([nom_comm, value, year, trimester, population])
 
-        pollution_df = pd.DataFrame(records, columns=['nom_comm', 'no2_value', 'year', 'trimester', 'population'])
+        pollution_df = pd.DataFrame(records, columns=['nom_comm', 'pollution_value', 'year', 'trimester', 'population'])
 
-        # Convertir les valeurs de NO2 en type numérique
-        pollution_df['no2_value'] = pd.to_numeric(pollution_df['no2_value'], errors='coerce')
+        # Convertir les valeurs de pollution en type numérique
+        pollution_df['pollution_value'] = pd.to_numeric(pollution_df['pollution_value'], errors='coerce')
         pollution_df['population'] = pd.to_numeric(pollution_df['population'], errors='coerce')
         
-        # Filtrer les enregistrements où NO2 dépasse le seuil d'information
-        impacted_df = pollution_df[pollution_df['no2_value'] > seuil_qualite_no2]
+        # Filtrer les enregistrements où la pollution dépasse le seuil d'information
+        impacted_df = pollution_df[pollution_df['pollution_value'] > seuil_qualite_pollution]
         
         # Agréger par année et trimestre pour trouver le nombre de personnes impactées
         impacted_df = impacted_df.groupby(['year', 'trimester']).agg({'population': 'sum'}).reset_index()
@@ -303,17 +306,86 @@ class ProcessData():
         plt.figure(figsize=(10, 6))
         plt.bar(impacted_df['year'].astype(str) + '-T' + impacted_df['trimester'].astype(str),
                 impacted_df['population'], color='red')
-        plt.title(f'Nombre de personnes impactées par NO2 au-delà du seuil de qualité')
+        plt.title(f'Nombre de personnes impactées par {pollution.upper()} au-delà du seuil de qualité')
         plt.xlabel('Trimestre')
         plt.ylabel('Population impactée')
         plt.xticks(rotation=45)
         plt.tight_layout()
         plt.show()
+    
+    def getTop3PollutionHoursByCityAndTrimester(self, pollutant_type):
+        records = []
+        for index, row in self.dataframe.iterrows():
+            nom_comm = row['nom_comm']
+            self.logger.info("getTop3PollutionHoursByCityAndTrimester() -> " + nom_comm)
+            for value, date in row['pollutions'][pollutant_type]:
+                date = pd.to_datetime(date)
+                hour = date.hour
+                trimester = (date.month - 1) // 3 + 1  # 1 pour Q1, 2 pour Q2, 3 pour Q3, 4 pour Q4
+                year = date.year
+                records.append([nom_comm, value, year, trimester, hour])
+        
+        pollution_df = pd.DataFrame(records, columns=['nom_comm', 'value', 'year', 'trimester', 'hour'])
+        
+        # Convertir les valeurs en type numérique
+        pollution_df['value'] = pd.to_numeric(pollution_df['value'], errors='coerce')
+        
+        # Étape 1 : Calculer la moyenne horaire par ville et par trimestre
+        hourly_pollution = pollution_df.groupby(['nom_comm', 'year', 'trimester', 'hour']).agg({'value': 'mean'}).reset_index()
+        
+        # Étape 2 : Pour chaque ville et chaque trimestre, trouver les 3 heures avec les valeurs moyennes les plus élevées
+        top_hours = hourly_pollution.groupby(['nom_comm', 'year', 'trimester']).apply(lambda x: x.nlargest(3, 'value')).reset_index(drop=True)
+        
+        # Étape 3 : Génération des graphiques pour chaque ville et chaque trimestre
+        cities = top_hours['nom_comm'].unique()
+        for city in cities:
+            city_data = top_hours[top_hours['nom_comm'] == city]
+            years = city_data['year'].unique()
+            for year in years:
+                for trimester in range(1, 5):
+                    trimester_data = city_data[(city_data['year'] == year) & (city_data['trimester'] == trimester)]
+                    if not trimester_data.empty:
+                        plt.figure(figsize=(10, 6))
+                        plt.bar(trimester_data['hour'].astype(str), trimester_data['value'], color='blue')
+                        plt.title(f'Top 3 Heures de Pic de Pollution pour {city} - {year} T{trimester}')
+                        plt.xlabel('Heure')
+                        plt.ylabel(f'Valeur Moyenne de {pollutant_type.upper()}')
+                        plt.xticks(rotation=45)
+                        plt.tight_layout()
+                        plt.show()
 
-    def getPollutionByDepartmentandSemester(self):
-        pass
-    def getPollutionPDLBySemester(self):
-        pass
+    def plotEnterpriseSectionsByCity(self):
+        records = []
+        
+        for index, row in self.dataframe.iterrows():
+            nom_comm = row['nom_comm']
+            self.logger.info("plotEnterpriseSectionsByCity() -> " + nom_comm)
+            entreprises = row['entreprises']
+            
+            for entreprise in entreprises:
+                section = entreprise['sectionetablissement'].split(';')[0].strip()
+                records.append([nom_comm, section])
+        
+        # Créer un DataFrame avec les sections d'établissement par ville
+        sections_df = pd.DataFrame(records, columns=['nom_comm', 'sectionetablissement'])
+        
+        # Compter le nombre d'entreprises par section pour chaque ville
+        section_counts = sections_df.groupby(['nom_comm', 'sectionetablissement']).size().reset_index(name='count')
+        
+        # Générer des graphiques pour chaque ville
+        cities = section_counts['nom_comm'].unique()
+        for city in cities:
+            city_data = section_counts[section_counts['nom_comm'] == city]
+            
+            plt.figure(figsize=(12, 8))
+            plt.bar(city_data['sectionetablissement'], city_data['count'], color='blue')
+            plt.title(f'Nombre d\'Entreprises par Section à {city}')
+            plt.xlabel('Section d\'Établissement')
+            plt.ylabel('Nombre d\'Entreprises')
+            plt.xticks(rotation=45, ha='right')
+            plt.tight_layout()
+            plt.show()
+
 # Utilisation de la classe
 if __name__ == "__main__":
     loader = LoadData()
@@ -322,9 +394,13 @@ if __name__ == "__main__":
     cleaner = CleanData(combined_df)
     clean_df = cleaner.get_cached_clean_df()
 
-    clean_df = joblib.load("clean_df_data.pkl")
+    #clean_df = joblib.load("clean_df_data.pkl")
 
     exposer = ProcessData(clean_df)
     exposer.getPollutionAverageByCityandSTrimester("no2")
     exposer.getPollutionAverageByCityandSTrimester("pm10")
-    exposer.getHightNo2LevelByPopulation()
+    exposer.getHightPollutionLevelByPopulation("no2")
+    exposer.getHightPollutionLevelByPopulation("pm10")
+    exposer.getTop3PollutionHoursByCityAndTrimester("no2")
+    exposer.getTop3PollutionHoursByCityAndTrimester("pm10")
+    exposer.plotEnterpriseSectionsByCity()
