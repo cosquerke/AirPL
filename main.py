@@ -207,7 +207,7 @@ class CleanData():
         logging.basicConfig(level=logging.INFO)
         self.logger = logging.getLogger(__name__)
 
-    # NOTE: Penser à conserver les communes frontalière en cas d'alerte ?
+    
     def deleteEmptyCityPollution(self):
         self.brut_df = self.brut_df[self.brut_df["pollutions"].apply(lambda x: len(x.get("no2", [])) > 0 or len(x.get("pm10", [])) > 0)]
 
@@ -244,9 +244,10 @@ class ProcessData():
             self.logger.info("getPollutionByCityandSemester() -> "+nom_comm)
             for value, date in row['pollutions'][pollution]:
                 date = pd.to_datetime(date)
-                trimester = (date.month - 1) // 3 + 1  # 1 pour Q1, 2 pour Q2, 3 pour Q3, 4 pour Q4
+                trimester = (date.month - 1) // 3 + 1  
                 year = date.year
-                records.append([nom_comm, value, year, trimester])
+                if year!=1970 : 
+                    records.append([nom_comm, value, year, trimester])
 
         pollution_df = pd.DataFrame(records, columns=['nom_comm', 'value', 'year', 'trimester'])
 
@@ -286,9 +287,11 @@ class ProcessData():
             self.logger.info(f'getHight{pollution}LevelByPopulation() -> '+nom_comm)
             for value, date in row['pollutions'][pollution]:
                 date = pd.to_datetime(date)
-                trimester = (date.month - 1) // 3 + 1  # 1 pour Q1, 2 pour Q2, 3 pour Q3, 4 pour Q4
+                trimester = (date.month - 1) // 3 + 1  
                 year = date.year
-                records.append([nom_comm, value, year, trimester, population])
+                if year!=1970 : 
+                    records.append([nom_comm, value, year, trimester, population])
+               
 
         pollution_df = pd.DataFrame(records, columns=['nom_comm', 'pollution_value', 'year', 'trimester', 'population'])
 
@@ -321,9 +324,10 @@ class ProcessData():
             for value, date in row['pollutions'][pollution]:
                 date = pd.to_datetime(date)
                 hour = date.hour
-                trimester = (date.month - 1) // 3 + 1  # 1 pour Q1, 2 pour Q2, 3 pour Q3, 4 pour Q4
+                trimester = (date.month - 1) // 3 + 1  
                 year = date.year
-                records.append([nom_comm, value, year, trimester, hour])
+                if year!=1970 : 
+                    records.append([nom_comm, value, year, trimester, hour])
         
         pollution_df = pd.DataFrame(records, columns=['nom_comm', 'value', 'year', 'trimester', 'hour'])
         
@@ -393,7 +397,8 @@ class ProcessData():
             self.logger.info("getPollutionEvolutionByCity() -> " + nom_comm)
             for value, date in row['pollutions'][pollution]:
                 date = pd.to_datetime(date).tz_localize(None)  # Convertir en tz-naive
-                records.append([nom_comm, value, date])
+                if date.year!=1970 : 
+                    records.append([nom_comm, value, date])
         
         pollution_df = pd.DataFrame(records, columns=['nom_comm', 'value', 'date'])
         
